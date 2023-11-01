@@ -1,0 +1,29 @@
+{
+  "name": "farmkal",
+  "version": "1.0.0",
+  "description": "Farmkal backend",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hima707ch/Farmkal.git"
+  },
+  "author": "Himanshu Chauhan",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hima707ch/Farmkal/issues"
+  },
+  "homepage": "https://github.com/hima707ch/Farmkal#readme",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mongoose": "^7.6.3",
+    "node-geocoder": "^4.2.0",
+    "validator": "^13.11.0"
+  }
+}
