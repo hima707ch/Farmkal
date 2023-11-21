@@ -8,38 +8,36 @@ const productSchema = mongoose.Schema({
     // Send by seller
     name : {
         type : String,
-        required : [true , "Please enter name"]
+        // required : [true , "Please enter name"]
     },
     description : {
         type : String,
-        required : [true, "Please enter description"]
+        // required : [true, "Please enter description"]
     },
     price : {
-        type : Number,
-        required : [true, "Please enter Price"],
+        type : String,
+        // required : [true, "Please enter Price"],
         maxLength : [8, "exceeds limit"]
     },
     category : {
         type : String,
-        required : [true, "Please enter category"]
+        // required : [true, "Please enter category"]
     },
-    location : {
-        lattitude : {
-            type : Number,
-        },
-        longitude : {
-            type : Number,
-        }
+    lattitude : {
+        type : Number,
+    },
+    longitude : {
+        type : Number,
     },
     images : [
         {
             public_id : {
                 type : String,
-                required : true
+                //required : true
             },
             url : {
                 type : String,
-                required : true
+                //required : true
             }
         }
     ],
