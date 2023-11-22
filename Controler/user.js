@@ -36,28 +36,40 @@ const createUser = async (req, res) => {
 
     const user = await User.create(userData);
 
+    if (!user) {
+      res.status(400).json({
+        success: false,
+        message: "Error creating user",
+      });
+    }
+
     // uploading image
     if (user) {
-      if (req.files && req.files.avatar) {
-        await cloudinary.uploader
-          .upload_stream(
-            { folder: "Farmkal/Users", width: 150, crop: "scale" },
-            async (error, result) => {
-              if (error) {
-                console.error("Error uploading image:", error);
-              } else {
-                console.log("Image uploaded successfully:", result);
-                user.avatar = {
-                  public_id: result.public_id,
-                  url: result.secure_url,
-                };
+      try {
+        if (req.files && req.files.avatar) {
+          await cloudinary.uploader
+            .upload_stream(
+              { folder: "Farmkal/Users", width: 150, crop: "scale" },
+              async (error, result) => {
+                if (error) {
+                  console.error("Error uploading image:", error);
+                } else {
+                  console.log("Image uploaded successfully:", result);
+                  user.avatar = {
+                    public_id: result.public_id,
+                    url: result.secure_url,
+                  };
 
-                const resp = await user.save();
-                console.log(resp);
-              }
-            },
-          )
-          .end(req.files.avatar.data);
+                  const resp = await user.save();
+                  console.log(resp);
+                }
+              },
+            )
+            .end(req.files.avatar.data);
+        }
+      } catch (err) {
+        console.log("Error uploading image");
+        console.log(err);
       }
 
       if (city != null && city.length > 0) {
@@ -115,10 +127,6 @@ const isUserExist = async (req, res) => {
   }
 };
 
-const testFunction = async (req, res) => {
-  res.send("Working fine");
-};
-
 const loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -159,36 +167,47 @@ const loginUser = async (req, res, next) => {
 };
 
 const getChatUserList = async (req, res) => {
+  console.log("get chat list calledis");
   try {
     console.log(req.body);
-    const chatData = await ChatData.findOne({ me: req.body.myEmail });
+    const chatList = await ChatData.findOne({ me: req.body.myEmail });
 
+    if (!chatList) {
+      res.status(400).json({
+        success: false,
+        message: "Email not exist in database",
+      });
+      return;
+    }
     // console.log(chatData, req.body.myEmail);
 
-    const keys = Object.keys(chatData);
+    const emails = Object.keys(chatList);
     // console.log(keys);
 
-    const emails = keys.filter((ele) => {
-      if (Array.isArray(chatData[ele])) return true;
-      return false;
-    });
+    const nameWithEmailArray = []; // result
 
-    console.log(emails);
+    for (var email of emails) {
+      console.log("email used ", email);
 
-    const nameWithEmailArray = [];
+      if (!email.includes("@")) continue;
 
-    for (var i = 0; i < emails.length; i++) {
-      const user = await User.findOne({ email: emails[i] })
+      const emailFilter = email.replaceAll("@dot@", ".");
+
+      const user = await User.findOne({ email: emailFilter })
         .select("name")
         .exec();
 
+      console.log("user", user, user.name);
+
       nameWithEmailArray.push({
-        email: emails[i],
+        email: emailFilter,
         name: user.name,
       });
+
+      //console.log(nameWithEmailArray);
     }
 
-    console.log(nameWithEmailArray);
+    //console.log(nameWithEmailArray);
 
     res.status(200).json({
       success: true,
@@ -200,9 +219,17 @@ const getChatUserList = async (req, res) => {
 };
 
 const getChatData = async (req, res) => {
+  console.log("get chat data called");
   try {
     console.log(req.body);
     const chat = await ChatData.findOne({ me: req.body.myEmail });
+
+    if (!chat) {
+      res.status(400).json({
+        success: false,
+        message: "Email not exist in database",
+      });
+    }
 
     const chatData = chat[req.body.friendEmail];
 
@@ -215,21 +242,11 @@ const getChatData = async (req, res) => {
   }
 };
 
-const createChat = async (req, res) => {
-  ChatData.create({
-    me: "him@g.com",
-    isNewMessage: false,
-    lastSeen: Date.now(),
-  });
-};
-
 module.exports = {
   createUser,
   addUserToCity,
   isUserExist,
   loginUser,
-  createChat,
   getChatUserList,
   getChatData,
-  testFunction,
 };
