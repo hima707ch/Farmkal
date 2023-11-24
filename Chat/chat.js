@@ -1,37 +1,70 @@
 const socketIo = require("socket.io");
 const app = require("../app");
 const http = require("http");
-
 const server = http.createServer(app);
 const io = socketIo(server);
-
 const { log } = require("console");
-
 const ChatData = require("../Models/chatting");
+const User = require("../Models/user");
 
 const users = {}; // to store user sockets
 
 io.on("connection", (socket) => {
   console.log(`A user connected - ${socket.id}`);
 
-  let userEmailId;
+  let userEmailId; // my email id or sender email id
 
-  socket.on("signin", (data) => {
-    const { emailId } = data;
+  socket.on("signin", async (userData) => {
+    const { emailId, phone } = userData;
     log("event sign in callled");
-    console.log(emailId);
+
+    if (!emailId && !phone) {
+      console.log("No email id or phone ");
+      socket.emit("invalid_data", { error: "No emailId or phone recieved" });
+      return;
+    }
+
+    console.log(emailId, phone);
+
+    let userObjId;
+
+    if (emailId) {
+      userObjId = await User.findOne({ email: emailId }).select("_id").exec();
+    } else {
+      userObjId = await User.findOne({ phone: phone }).select("_id").exec();
+    }
+
+    console.log(userObjId);
+
     users[emailId] = socket.id;
     userEmailId = emailId;
     getNewMessage(userEmailId);
   });
 
-  // io.emit('hi',{message : "hi"})
+  io.emit("verify_connection", { message: "hi from server" });
 
   // server rereciving message from frontend
   socket.on("chat", async (data) => {
     const { receiverEmailId, message } = data;
 
     console.log("chat msg ", message);
+
+    if (!receiverEmailId) {
+      console.log(" No reciever Email ");
+      socket.emit("invalid_data", { error: "No reciver Eamil Id recieved" });
+      return;
+    }
+    if (!userEmailId) {
+      console.log(" No User Email Id ");
+      socket.emit("invalid_data", { error: "No user Email Id recieved" });
+      return;
+    }
+    if (!message) {
+      console.log("No message");
+      socket.emit("invalid_data", { error: "No Message" });
+      return;
+    }
+
     await saveMessage(userEmailId, receiverEmailId, message, false, "post");
 
     const receiverSocketId = users[receiverEmailId];
@@ -117,6 +150,8 @@ async function getNewMessage(userEmailId) {
 async function saveMessage(myEmailId, friendEmailId, message, isNew, type) {
   console.log("Save message called");
   let myChat;
+
+  console.log("myEmail Id ", myEmailId, "friendEmailId ", friendEmailId);
 
   const friendEmailIdFilter = friendEmailId.replaceAll(".", "@dot@");
   const myEmailIdFilter = myEmailId.replaceAll(".", "@dot@");

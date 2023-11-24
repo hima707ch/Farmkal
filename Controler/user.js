@@ -197,6 +197,10 @@ const getChatUserList = async (req, res) => {
         .select("name")
         .exec();
 
+      if (!user) {
+        continue;
+      }
+
       console.log("user", user, user.name);
 
       nameWithEmailArray.push({
@@ -222,8 +226,21 @@ const getChatData = async (req, res) => {
   console.log("get chat data called");
   try {
     console.log(req.body);
-    const chat = await ChatData.findOne({ me: req.body.myEmail });
 
+    if (!req.body.friendEmail) {
+      res.status(400).json({
+        success: false,
+        message: "Please provide friendEmail",
+      });
+    }
+
+    const friendEmailIdFilter = req.body.friendEmail.replaceAll(".", "@dot@");
+
+    const chat = await ChatData.findOne({ me: req.body.myEmail })
+      .select(friendEmailIdFilter)
+      .exec();
+
+    console.log("chat ", chat);
     if (!chat) {
       res.status(400).json({
         success: false,
@@ -231,11 +248,9 @@ const getChatData = async (req, res) => {
       });
     }
 
-    const chatData = chat[req.body.friendEmail];
-
     res.status(200).json({
       success: true,
-      chatData,
+      chatData: chat[friendEmailIdFilter] || [],
     });
   } catch (err) {
     console.log(err);
