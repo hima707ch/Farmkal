@@ -6,22 +6,20 @@ const userSchema = mongoose.Schema({
   // Send by User
   name: {
     type: String,
-    //required: [true, "Please Enter Your Name"],
-    maxLength: [30, "Name cannot exceed 30 characters"],
-    minLength: [1, "Name should have more than 1 characters"],
   },
   email: {
     type: String,
-    //required: [true, "Please Enter Your Email"],
+    sparse : true,
     unique: true,
     validate: [validator.isEmail, "Please Enter a valid Email"],
   },
   password: {
     type: String,
-    minLength: [8, "Password should be greater than 8 characters"],
+    minLength: [6, "Password should be greater than 6 characters"],
   },
   phone: {
     type: Number,
+    sparse:true,
     unique: true,
     minLength: [10, "must be 10 digits"],
     maxLength: [10, "not more than 10 digits"],

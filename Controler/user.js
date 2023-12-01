@@ -41,6 +41,7 @@ const createUser = async (req, res) => {
         success: false,
         message: "Error creating user",
       });
+      return;
     }
 
     // uploading image
@@ -162,6 +163,7 @@ const loginUser = async (req, res, next) => {
     sendToken(user, 200, res);
     return;
   } catch (err) {
+    
     console.log(err);
   }
 };
@@ -170,48 +172,61 @@ const getChatUserList = async (req, res) => {
   console.log("get chat list calledis");
   try {
     console.log(req.body);
-    const chatList = await ChatData.findOne({ me: req.body.myEmail });
+
+    const { myEmail, phone } = req.body;
+
+    let myId = await User.findOne({
+      $or: [{ email: myEmail }, { phone: phone }],
+    })
+      .select("id")
+      .exec();
+
+    if (!myId) {
+      res.status(400).json({
+        success: false,
+        message: "Email or Phone not exist",
+      });
+      return;
+    }
+
+    myId = myId.id;
+
+    const chatList = await ChatData.findOne({ me: myId });
 
     if (!chatList) {
       res.status(400).json({
-        success: false,
-        message: "Email not exist in database",
+        success: true,
+        message: "No Chat List Exist",
       });
       return;
     }
     // console.log(chatData, req.body.myEmail);
 
-    const emails = Object.keys(chatList);
+    // db chat data all keys
+    const keys = Object.keys(chatList);
     // console.log(keys);
 
     const nameWithEmailArray = []; // result
 
-    for (var email of emails) {
-      console.log("email used ", email);
+    for (var uniqueId of keys) {
+      console.log("uniqueId ", uniqueId);
 
-      if (!email.includes("@")) continue;
+      if (!Array.isArray(chatList[uniqueId])) continue;
 
-      const emailFilter = email.replaceAll("@dot@", ".");
-
-      const user = await User.findOne({ email: emailFilter })
-        .select("name")
-        .exec();
+      const user = await User.findById(uniqueId).select("name email").exec();
 
       if (!user) {
+        console.log("PROD ERROR : A user without Reistration using chat");
         continue;
       }
 
       console.log("user", user, user.name);
 
       nameWithEmailArray.push({
-        email: emailFilter,
+        email: user.email,
         name: user.name,
       });
-
-      //console.log(nameWithEmailArray);
     }
-
-    //console.log(nameWithEmailArray);
 
     res.status(200).json({
       success: true,
@@ -227,30 +242,69 @@ const getChatData = async (req, res) => {
   try {
     console.log(req.body);
 
-    if (!req.body.friendEmail) {
+    const { myEmail, myPhone, friendEmail, friendPhone } = req.body;
+
+    if (!friendEmail && !friendPhone) {
       res.status(400).json({
         success: false,
-        message: "Please provide friendEmail",
+        message: "Please provide friendEmail or friendPhone",
       });
+      return;
+    }
+    if (!myEmail && !myPhone) {
+      res.status(400).json({
+        success: false,
+        message: "Please provide myEmail or myPhone",
+      });
+      return;
     }
 
-    const friendEmailIdFilter = req.body.friendEmail.replaceAll(".", "@dot@");
-
-    const chat = await ChatData.findOne({ me: req.body.myEmail })
-      .select(friendEmailIdFilter)
+    let myId = await User.findOne({
+      $or: [{ email: myEmail }, { phone: myPhone }],
+    })
+      .select("id")
       .exec();
+
+    if (!myId) {
+      res.status(400).json({
+        success: false,
+        message: " my Email or Phone not exist",
+      });
+      return;
+    }
+
+    myId = myId.id;
+
+    let friendId = await User.findOne({
+      $or: [{ email: friendEmail }, { phone: friendPhone }],
+    })
+      .select("id")
+      .exec();
+
+    if (!friendId) {
+      res.status(400).json({
+        success: false,
+        message: " friend Email or Phone not exist",
+      });
+      return;
+    }
+
+    friendId = friendId.id;
+
+    const chat = await ChatData.findOne({ me: myId }).select(friendId).exec();
 
     console.log("chat ", chat);
     if (!chat) {
       res.status(400).json({
-        success: false,
-        message: "Email not exist in database",
+        success: true,
+        message: "No chat exist",
       });
+      return;
     }
 
     res.status(200).json({
       success: true,
-      chatData: chat[friendEmailIdFilter] || [],
+      chatData: chat[friendId] || [],
     });
   } catch (err) {
     console.log(err);

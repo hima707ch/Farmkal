@@ -12,7 +12,7 @@ const users = {}; // to store user sockets
 io.on("connection", (socket) => {
   console.log(`A user connected - ${socket.id}`);
 
-  let userEmailId; // my email id or sender email id
+  let userObjId; // my objId or sender objId
 
   socket.on("signin", async (userData) => {
     const { emailId, phone } = userData;
@@ -26,37 +26,46 @@ io.on("connection", (socket) => {
 
     console.log(emailId, phone);
 
-    let userObjId;
+    userObjId = await User.findOne({
+      $or: [{ email: emailId }, { phone: phone }],
+    })
+      .select("_id")
+      .exec();
 
-    if (emailId) {
-      userObjId = await User.findOne({ email: emailId }).select("_id").exec();
-    } else {
-      userObjId = await User.findOne({ phone: phone }).select("_id").exec();
+    if (!userObjId) {
+      res.status(400).json({
+        success: false,
+        message: "User/My Email or Phone not exist",
+      });
     }
 
+    userObjId = userObjId.id;
     console.log(userObjId);
 
-    users[emailId] = socket.id;
-    userEmailId = emailId;
-    getNewMessage(userEmailId);
+    users[userObjId] = socket.id;
+    getNewMessage(userObjId);
   });
 
   io.emit("verify_connection", { message: "hi from server" });
 
   // server rereciving message from frontend
   socket.on("chat", async (data) => {
-    const { receiverEmailId, message } = data;
+    const { receiverPhone, receiverEmailId, message } = data;
 
     console.log("chat msg ", message);
 
-    if (!receiverEmailId) {
-      console.log(" No reciever Email ");
-      socket.emit("invalid_data", { error: "No reciver Eamil Id recieved" });
+    if (!receiverEmailId && !receiverPhone) {
+      console.log(" No reciever Email or Phone ");
+      socket.emit("invalid_data", {
+        error: "No reciver Eamil Id or Phone recieved",
+      });
       return;
     }
-    if (!userEmailId) {
+    if (!userObjId) {
       console.log(" No User Email Id ");
-      socket.emit("invalid_data", { error: "No user Email Id recieved" });
+      socket.emit("invalid_data", {
+        error: "No user Email Id or user Phone recieved",
+      });
       return;
     }
     if (!message) {
@@ -65,23 +74,38 @@ io.on("connection", (socket) => {
       return;
     }
 
-    await saveMessage(userEmailId, receiverEmailId, message, false, "post");
+    let receiverObjId = await User.findOne({
+      $or: [{ email: receiverEmailId }, { phone: receiverPhone }],
+    })
+      .select("id")
+      .exec();
 
-    const receiverSocketId = users[receiverEmailId];
+    if (!receiverObjId) {
+      res.status(400).json({
+        success: false,
+        message: "Receiver Email or Phone not exist",
+      });
+    }
+
+    receiverObjId = receiverObjId.id;
+
+    await saveMessage(userObjId, receiverObjId, message, false, "post");
+
+    const receiverSocketId = users[receiverObjId];
 
     if (receiverSocketId) {
       console.log("inside if");
 
       io.to(receiverSocketId).emit("sendMsg", {
-        sender: userEmailId,
+        sender: userObjId,
         message,
       });
 
-      await saveMessage(receiverEmailId, userEmailId, message, false, "get");
+      await saveMessage(receiverObjId, userObjId, message, false, "get");
     } else {
       // saving in reciver database as new message
 
-      await saveMessage(receiverEmailId, userEmailId, message, true, "get");
+      await saveMessage(receiverObjId, userObjId, message, true, "get");
       console.log(
         `User ${receiverEmailId} is offline. Save the message for later.`,
       );
@@ -91,90 +115,66 @@ io.on("connection", (socket) => {
   // Handle disconnection
   socket.on("disconnect", () => {
     console.log("User disconnected");
-    delete users[userEmailId];
+    delete users[userObjId];
   });
 });
 
-async function getNewMessage(userEmailId) {
+async function getNewMessage(myId) {
   console.log("get new Mesage called");
   let userChatData;
 
   userChatData = await ChatData.findOne({
-    me: userEmailId,
+    me: myId,
     isNewMessage: true,
   });
-
-  // log(userChatData, userEmailId);
 
   if (!userChatData) {
     return;
   }
 
-  log("here");
+  const mySocketId = users[myId];
+  var keys = Object.keys(userChatData);
 
-  const mySocketId = users[userEmailId];
-
-  var senderEmails = Object.keys(userChatData);
-  for (var value of senderEmails) {
-    if (!value.includes("@")) {
+  // Iterating keys of user chat
+  for (var key of keys) {
+    if (!Array.isArray(userChatData[key])) {
       continue;
     }
-
-    log("in loop");
-    log(value);
-
-    for (var ele of userChatData[value]) {
+    // Iterating messaghe of particular email
+    for (var msgDoc of userChatData[key]) {
       io.to(mySocketId).emit("sendMsg", {
-        sender: value,
-        message: ele.message,
+        sender: key,
+        message: msgDoc.message,
       });
-
-      await saveMessage(userEmailId, value, ele.message, false, "get");
+      await saveMessage(myId, key, msgDoc.message, false, "get");
     }
-    /*
-      userChatData[value].map(async (ele) => {
-        io.to(mySocketId).emit("sendMsg", {
-          sender: value,
-          message: ele.message,
-        });
-  
-        await saveMessage(userEmailId,value,ele.message,false,"get");
-      })
-    ;
-    */
   }
-
-  await ChatData.deleteOne({ me: userEmailId, isNewMessage: true });
+  await ChatData.deleteOne({ me: myId, isNewMessage: true });
 }
 
-async function saveMessage(myEmailId, friendEmailId, message, isNew, type) {
+async function saveMessage(myId, friendId, message, isNew, type) {
   console.log("Save message called");
   let myChat;
 
-  console.log("myEmail Id ", myEmailId, "friendEmailId ", friendEmailId);
-
-  const friendEmailIdFilter = friendEmailId.replaceAll(".", "@dot@");
-  const myEmailIdFilter = myEmailId.replaceAll(".", "@dot@");
+  console.log("my Id ", myId, "friendId ", friendId);
 
   // find user chat
-  myChat = await ChatData.findOne({ me: myEmailId, isNewMessage: isNew });
-
-  // console.log(myChat);
+  myChat = await ChatData.findOne({ me: myId, isNewMessage: isNew });
 
   // if i am a new user
   if (!myChat) {
     myChat = await ChatData.create({
-      me: myEmailId,
+      me: myId,
       isNewMessage: isNew,
     });
   }
 
   // pushing chat
   const resp = await ChatData.updateOne(
-    { me: myEmailId, isNewMessage: isNew },
+    { me: myId, isNewMessage: isNew },
     {
       $push: {
-        [friendEmailIdFilter]: {
+        [friendId]: {
           message: message,
           time: Date.now(),
           type: type,
