@@ -4,14 +4,15 @@ const {
   loginUser,
   getChatUserList,
   getChatData,
+  createOrUpdateUser,
 } = require("../Controler/user");
 
 const router = require("express").Router();
 
 router.route("/register").post(createUser);
 router.route("/login").post(loginUser);
+router.post("/createorupdate",createOrUpdateUser);
 router.route("/chat").post(getChatUserList);
 router.route("/chatdata").post(getChatData);
-router.route("/isuser").post(isUserExist);
 
 module.exports = router;

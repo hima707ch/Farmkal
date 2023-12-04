@@ -10,7 +10,7 @@ const userSchema = mongoose.Schema({
   email: {
     type: String,
     sparse : true,
-    unique: true,
+    unique : true,
     validate: [validator.isEmail, "Please Enter a valid Email"],
   },
   password: {
@@ -35,6 +35,11 @@ const userSchema = mongoose.Schema({
       type: String,
     },
   },
+
+  photoUrl : {   // Google image
+    type : String
+  },
+
   latitude: {
     type: Number,
   },

@@ -4,9 +4,12 @@ const ChatData = require("../Models/chatting");
 const sendToken = require("../utils/jwtAuth");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const CustomError = require("../utils/customError");
+const uploadImageToCloudinary = require("../utils/uploadImage");
+const ApiFeatures = require("../utils/ApiFeatures");
 const cloudinary = require("cloudinary").v2;
 
-const createUser = async (req, res) => {
+const createUser = async (req, res, next) => {
   try {
     console.log(req.files);
 
@@ -14,6 +17,7 @@ const createUser = async (req, res) => {
       name,
       email,
       password,
+      photoUrl,
       phone,
       bio,
       latitude,
@@ -26,6 +30,7 @@ const createUser = async (req, res) => {
       name,
       email,
       password,
+      photoUrl,
       phone,
       bio,
       latitude,
@@ -36,71 +41,103 @@ const createUser = async (req, res) => {
 
     const user = await User.create(userData);
 
-    if (!user) {
-      res.status(400).json({
-        success: false,
-        message: "Error creating user",
-      });
-      return;
-    }
-
     // uploading image
-    if (user) {
-      try {
-        if (req.files && req.files.avatar) {
-          await cloudinary.uploader
-            .upload_stream(
-              { folder: "Farmkal/Users", width: 150, crop: "scale" },
-              async (error, result) => {
-                if (error) {
-                  console.error("Error uploading image:", error);
-                } else {
-                  console.log("Image uploaded successfully:", result);
-                  user.avatar = {
-                    public_id: result.public_id,
-                    url: result.secure_url,
-                  };
-
-                  const resp = await user.save();
-                  console.log(resp);
-                }
-              },
-            )
-            .end(req.files.avatar.data);
-        }
-      } catch (err) {
-        console.log("Error uploading image");
-        console.log(err);
-      }
+    if (user && req.files && req.files.avatar) {
+     uploadImageToCloudinary(req.files.avatar,user,"Farmkal/Users", false);
 
       if (city != null && city.length > 0) {
-        addUserToCity(city, user._id);
+        await addUserToCity(city, user._id);
       }
 
       res.status(201).json({
         success: true,
         user,
       });
-    } else {
-      res.json({
-        success: false,
-        msg: "Invalid details",
-      });
     }
   } catch (err) {
-    console.log(err);
-    console.log(err.code);
-
-    if (err.code == "11000") {
-      res.status(400).json({
-        success: false,
-        message: "Email or phone already Exist",
-      });
-    }
+    next(err);
   }
 };
 
-const addUserToCity = async (city, userID) => {
+const createOrUpdateUser = async (req,res, next) => {
+  try{
+
+    console.log("c or up user",req.body);
+
+  const {
+    id,
+    name,
+    email,
+    password,
+    photoUrl,
+    phone,
+    bio,
+    latitude,
+    longitude,
+    state,
+    city,
+  } = req.body;
+
+  const data = {
+    name,
+    email,
+    password,
+    photoUrl,
+    phone,
+    bio,
+    latitude,
+    longitude,
+    state,
+    city,
+  }
+
+  let user;
+
+  if(phone)
+  console.log(phone);
+
+  if(!id && !email && !phone){
+    return next(new CustomError("provide user id or email or phone", 400));
+  }
+
+  if(id) {
+    
+    user = await User.findByIdAndUpdate(id, data, {
+      new : true,
+      runValidators : true,
+      useFindAndModify :true
+    } )
+  
+  }
+  else{
+
+    user = await User.create(data);
+
+    if(city && city.length > 0){
+      await addUserToCity(city,user.id);
+    }
+
+  }
+
+  console.log("user created");
+
+  if(user && req.files && req.files.avatar){
+    uploadImageToCloudinary(req.files.avatar,user,"Farmkal/Users", false);
+  }
+
+  res.status(200).json({
+    success : true,
+    user
+  })
+
+  }
+  catch(err){
+    next(err);
+  }
+
+};
+
+const addUserToCity = async (city, userID, next) => {
   const isCity = await UserCity.findOne({ city: { $exists: true } });
 
   if (isCity) {
@@ -114,62 +151,35 @@ const addUserToCity = async (city, userID) => {
   }
 };
 
-const isUserExist = async (req, res) => {
-  try {
-    const user = await User.findOne({ email: req.body.email });
-
-    const result = user ? true : false;
-
-    res.status(200).json({
-      exist: result,
-    });
-  } catch (err) {
-    console.log(err);
-  }
-};
-
 const loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      res.status(400).json({
-        success: false,
-        message: "Empty fields",
-      });
-      return;
+     return next(new CustomError("Email or password missing", 400));
     }
 
     const user = await User.findOne({ email });
 
     if (!user) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid Email or Password",
-      });
-      return;
+      return next(new CustomError("Invalid email or password", 400));
     }
 
     const isPasswordMatch = await user.comparePassword(password);
 
     if (!isPasswordMatch) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid Email or Password",
-      });
-      return;
+      return next(new CustomError("Invalid email or password", 400));
     }
 
     sendToken(user, 200, res);
-    return;
+
   } catch (err) {
-    
-    console.log(err);
+    next(err);
   }
 };
 
-const getChatUserList = async (req, res) => {
-  console.log("get chat list calledis");
+const getChatUserList = async (req, res, next) => {
+  console.log("get chat list called");
   try {
     console.log(req.body);
 
@@ -182,29 +192,23 @@ const getChatUserList = async (req, res) => {
       .exec();
 
     if (!myId) {
-      res.status(400).json({
-        success: false,
-        message: "Email or Phone not exist",
-      });
-      return;
+      return next(new CustomError("Email or Phone not exist ", 400));
     }
 
     myId = myId.id;
 
-    const chatList = await ChatData.findOne({ me: myId });
+    const myAllChat = await ChatData.findOne({ me: myId });
 
-    if (!chatList) {
-      res.status(400).json({
-        success: true,
-        message: "No Chat List Exist",
-      });
+    if (!myAllChat) {
+      res.status(200).json({
+        success : true,
+        message : "No chat exist",
+        emailList : []
+      })
       return;
     }
-    // console.log(chatData, req.body.myEmail);
 
-    // db chat data all keys
     const keys = Object.keys(chatList);
-    // console.log(keys);
 
     const nameWithEmailArray = []; // result
 
@@ -233,30 +237,23 @@ const getChatUserList = async (req, res) => {
       emailList: nameWithEmailArray,
     });
   } catch (err) {
-    console.log(err);
+    next(err);
   }
 };
 
-const getChatData = async (req, res) => {
+const getChatData = async (req, res, next) => {
   console.log("get chat data called");
+
   try {
     console.log(req.body);
 
     const { myEmail, myPhone, friendEmail, friendPhone } = req.body;
 
     if (!friendEmail && !friendPhone) {
-      res.status(400).json({
-        success: false,
-        message: "Please provide friendEmail or friendPhone",
-      });
-      return;
+      return next(new CustomError("Please provide friendEmail or friendPhone", 400));
     }
     if (!myEmail && !myPhone) {
-      res.status(400).json({
-        success: false,
-        message: "Please provide myEmail or myPhone",
-      });
-      return;
+      return next(new CustomError("Please provide myEmail or myPhone", 400));
     }
 
     let myId = await User.findOne({
@@ -266,11 +263,7 @@ const getChatData = async (req, res) => {
       .exec();
 
     if (!myId) {
-      res.status(400).json({
-        success: false,
-        message: " my Email or Phone not exist",
-      });
-      return;
+      return next(new CustomError("myEmail or Phone is Invalid", 401));
     }
 
     myId = myId.id;
@@ -282,11 +275,7 @@ const getChatData = async (req, res) => {
       .exec();
 
     if (!friendId) {
-      res.status(400).json({
-        success: false,
-        message: " friend Email or Phone not exist",
-      });
-      return;
+      return next(new CustomError("friend Email or Phone not exist", 401));
     }
 
     friendId = friendId.id;
@@ -295,9 +284,10 @@ const getChatData = async (req, res) => {
 
     console.log("chat ", chat);
     if (!chat) {
-      res.status(400).json({
+      res.status(200).json({
         success: true,
         message: "No chat exist",
+        chatData : []
       });
       return;
     }
@@ -311,11 +301,46 @@ const getChatData = async (req, res) => {
   }
 };
 
+// Admin route
+
+const getAllUser = async (req,res,next)=>{
+  try{
+
+    const apifeatures = new ApiFeatures(User.find(), req.query)
+    .search()
+    .filter()
+    .paginate();
+
+    const users = await apifeatures.query;
+
+    res.status(200).json({
+      success : true,
+      users
+    })
+
+  }catch(err){
+    nexr(err);
+  }
+}
+
+const getUser = async (req,res,next)=>{
+  try{
+    const user = await User.findById(req.params.id);
+  }
+  catch(err){
+    next(err);
+  }
+
+
+}
+
 module.exports = {
   createUser,
   addUserToCity,
-  isUserExist,
+  createOrUpdateUser,
   loginUser,
   getChatUserList,
   getChatData,
+  getAllUser,
+  getUser
 };

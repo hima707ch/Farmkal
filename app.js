@@ -4,6 +4,7 @@ const fileUpload = require("express-fileupload");
 
 const userRouter = require("./Routers/userRoute");
 const productRouter = require("./Routers/productRoute");
+const globalErrorHandler = require("./Controler/errorController");
 
 const app = express();
 
@@ -29,5 +30,7 @@ app.get("/", (req, res) => {
 });
 app.use("/api/v1", userRouter);
 app.use("/api/v1", productRouter);
+
+app.use(globalErrorHandler);
 
 module.exports = app;
