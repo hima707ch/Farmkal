@@ -9,9 +9,9 @@ const {
 
 const router = require("express").Router();
 
-router.route("/register").post(createUser);
+router.route("/registerpassword").post(createUser);
 router.route("/login").post(loginUser);
-router.post("/createorupdate",createOrUpdateUser);
+router.post("/register",createOrUpdateUser);
 router.route("/chat").post(getChatUserList);
 router.route("/chatdata").post(getChatData);
 

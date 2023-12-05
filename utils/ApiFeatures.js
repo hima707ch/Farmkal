@@ -7,13 +7,38 @@ class ApiFeatures{
     filter(){
         const query = {...this.queryStr};
 
-        const removeFields = ["sort", "page", "limit"];
+        const removeFields = ["sort", "page", "limit", "sugg"];
 
         removeFields.forEach((ele)=>{
             delete query[ele];
         })
 
-        this.query = this.query.find(query);
+        let winningPlan = {};
+
+        if(this.queryStr.city && this.queryStr.category){
+            winningPlan = {city : 1, category : 1, score : -1}
+        }
+        else if(this.queryStr.city && !this.queryStr.category){
+            winningPlan = {city : 1, score :-1}
+        }
+
+        let categoryValue;
+
+        if(query.category)
+        {
+            categoryValue = query.category.split(',') || [];
+            query.category = { $in : categoryValue }
+        }
+
+        if(query.city && typeof(query.city) == "string"){
+            console.log(query.city);
+            query.city = query.city.toLocaleLowerCase();
+        }
+
+
+        console.log(query);
+
+        this.query = this.query.find(query).hint(winningPlan);
 
         return this;
     }

@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 
 const productCitySchema = mongoose.Schema({
-    name : String,
+    city : String,
+    latitude : Number,
+    longitude : Number,
+
     solid : [{
         type : mongoose.Schema.Types.ObjectId,
          ref: 'Product' 

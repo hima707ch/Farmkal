@@ -29,6 +29,9 @@ const productSchema = mongoose.Schema({
     longitude : {
         type : Number,
     },
+    score : {
+        type : Number
+    },
     images : [
         {
             public_id : {
@@ -91,11 +94,22 @@ const productSchema = mongoose.Schema({
     }
 })
 
-productSchema.pre('save',function(){
+productSchema.pre('save',function(next){
+
+    console.log("in save")
+
     if(this.isModified('reviews')){
         this.numOfRevies = this.reviews.length;
     }
+
+    this.score = Object.keys(this.toObject()).length + this.images.length + this.reviews.length;
+    
+    next();
 })
+
+productSchema.index({city :1, category : 1, score : -1});
+productSchema.index({city :1, score : -1 });
+
 
 const Product = mongoose.model('Product',productSchema);
 

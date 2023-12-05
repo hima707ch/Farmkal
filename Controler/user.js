@@ -44,7 +44,7 @@ const createUser = async (req, res, next) => {
     // uploading image
     if (user && req.files && req.files.avatar) {
       uploadImageToCloudinary(req.files.avatar, user, "Farmkal/Users", false);
-
+    }
       if (city != null && city.length > 0) {
         await addUserToCity(city, user._id);
       }
@@ -53,7 +53,7 @@ const createUser = async (req, res, next) => {
         success: true,
         user,
       });
-    }
+    
   } catch (err) {
     next(err);
   }
@@ -63,8 +63,9 @@ const createOrUpdateUser = async (req, res, next) => {
   try {
     console.log("c or up user", req.body);
 
+    const {id} = req.params;
+
     const {
-      id,
       name,
       email,
       password,
@@ -141,15 +142,31 @@ const addUserToCity = async (city, userID, next) => {
   }
 };
 
-const loginUser = async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
+const loginUser = async (req,res,next) =>{
 
-    if (!email || !password) {
+  const {email, phone} = req.body;
+
+  const user = await User.findOne({ $or: [{ email: email }, { phone: phone }] });
+
+    if (!user) {
+      return next(new CustomError("Invalid email or phone", 400));
+    }
+
+    // authentication
+
+    sendToken(user, 200, res);
+
+}
+
+const loginUserWithPassword = async (req, res, next) => {
+  try {
+    const { userName, password } = req.body;
+
+    if (!userName || !password) {
       return next(new CustomError("Email or password missing", 400));
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ userName });
 
     if (!user) {
       return next(new CustomError("Invalid email or password", 400));
@@ -247,29 +264,29 @@ const getChatData = async (req, res, next) => {
       return next(new CustomError("Please provide myEmail or myPhone", 400));
     }
 
-    let myId = await User.findOne({
+    let me = await User.findOne({
       $or: [{ email: myEmail }, { phone: myPhone }],
     })
       .select("id")
       .exec();
 
-    if (!myId) {
+    if (!me) {
       return next(new CustomError("myEmail or Phone is Invalid", 401));
     }
 
-    myId = myId.id;
+    let myId = me.id;
 
-    let friendId = await User.findOne({
+    let friend = await User.findOne({
       $or: [{ email: friendEmail }, { phone: friendPhone }],
     })
       .select("id")
       .exec();
 
-    if (!friendId) {
+    if (!friend) {
       return next(new CustomError("friend Email or Phone not exist", 401));
     }
 
-    friendId = friendId.id;
+    let friendId = friend.id;
 
     const chat = await ChatData.findOne({ me: myId }).select(friendId).exec();
 
@@ -315,6 +332,12 @@ const getAllUser = async (req, res, next) => {
 const getUser = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
+
+    res.status(200).json({
+      success : true,
+      user
+    })
+
   } catch (err) {
     next(err);
   }
@@ -322,7 +345,6 @@ const getUser = async (req, res, next) => {
 
 module.exports = {
   createUser,
-  addUserToCity,
   createOrUpdateUser,
   loginUser,
   getChatUserList,

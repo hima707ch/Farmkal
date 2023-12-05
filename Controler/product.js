@@ -5,6 +5,7 @@ const CustomError = require("../utils/CustomError");
 const uploadImageToCloudinary = require("../utils/uploadImage");
 const cloudinary = require("cloudinary").v2;
 const shuffleArray = require("../utils/ArrayFeatures");
+const { citiesData } = require("../utils/data");
 
 const createProduct = async (req, res, next) => {
   try {
@@ -82,16 +83,57 @@ const addProductToCity = async (city, productID, category) => {
 
 const getAllProduct = async (req, res, next) => {
   try {
-    const apifeatures = new ApiFeatures(Product.find(), req.query)
-      .search()
+    req.query.sort = '-score';
+    console.log(req.query);
+
+    let apifeatures = new ApiFeatures(Product.find(), req.query)
       .filter()
+      .sort()
       .paginate();
 
-    const products = await apifeatures.query;
+    let products = await apifeatures.query;
+
+    let count = products.length;
+    let moreProducts;
+
+    if( req.query.city &&  (count < 30 || req.query.sugg == "true") ) {
+
+      let nearByCity = [];
+
+      const myCity = citiesData.filter( (ele)=>{
+        if(ele.city == req.query.city){
+          return true;
+        }
+      } );
+
+      myLatitude = myCity[0].latitude;
+      myLongitude = myCity[0].longitude;
+
+      citiesData.map( (ele)=>{
+        if(ele.city == myCity[0].city) return;
+        if( (ele.latitude< myLatitude + 1 && ele.latitude > myLatitude - 1) &&
+         (ele.longitude < myLongitude +1 && ele.longitude > myLongitude - 1) ){
+          nearByCity.push(ele.city);
+         }
+      } );
+
+      console.log(nearByCity);
+
+      req.query.city = { $in : [...nearByCity] };
+
+      apifeatures = new ApiFeatures(Product.find(), req.query)
+      .filter()
+      .sort()
+      .paginate();
+
+      moreProducts = await apifeatures.query;
+
+    }
 
     res.status(200).json({
       success: true,
       products,
+      moreProducts
     });
   } catch (err) {
     next(err);
@@ -160,6 +202,26 @@ const updateProduct = async (req, res, next) => {
   }
 };
 
+const deleteProduct = async (req,res,next) =>{
+  try{
+    const id = req.params.id;
+
+    const resp = await Product.findByIdAndDelete(id);
+
+    if(!resp){
+        return next(new CustomError("No product Found", 200));
+    }
+
+    res.status(200).json({
+        success : true,
+        message : "Product deleted successfully"
+    })
+}
+catch(err){
+    next(err);
+}
+}
+
 const addImage = async (req, res, next) => {
   try {
     let product = await Product.findById(req.params.id);
@@ -169,6 +231,11 @@ const addImage = async (req, res, next) => {
     }
 
     uploadImageToCloudinary(req.files.image, product, "Farmkal/Products", true);
+
+    res.status(200).json({
+      success : true
+    })
+
   } catch (err) {
     next(err);
   }
@@ -176,6 +243,9 @@ const addImage = async (req, res, next) => {
 
 const deleteImage = async (req, res, next) => {
   try {
+
+    let product = await Product.findById(req.params.id);
+
     const { publicId } = req.params;
 
     if (!publicId) {
@@ -187,6 +257,14 @@ const deleteImage = async (req, res, next) => {
         console.error("Error deleting image:", error);
       } else {
         console.log("Image deleted successfully:", result);
+
+        product.images = product.images.filter( (element)=>{
+          if(element.public_Id == publicId){
+            return false;
+          }
+          return true;
+        } )
+
       }
     });
   } catch (err) {
@@ -195,6 +273,10 @@ const deleteImage = async (req, res, next) => {
 };
 
 const getProductFromCity = async (req, res, next) => {
+
+  // To do - rank according to score
+  // If less prod fetch from other city
+
   try {
     const { city, category, page, limit } = req.body;
     // console.log("here")
@@ -218,6 +300,7 @@ const getProductFromCity = async (req, res, next) => {
     if (!products) {
       return next("No product in city exist", 400);
     }
+
 
     let result = [];
 
@@ -247,11 +330,10 @@ const getProductFromCity = async (req, res, next) => {
 
 module.exports = {
   createProduct,
-  addProductToCity,
-  getProductFromCity,
   getAllProduct,
   getProduct,
   updateProduct,
   addImage,
   deleteImage,
+  deleteProduct
 };
