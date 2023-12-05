@@ -4,7 +4,7 @@ const ChatData = require("../Models/chatting");
 const sendToken = require("../utils/jwtAuth");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
-const CustomError = require("../utils/customError");
+const CustomError = require("../utils/CustomError");
 const uploadImageToCloudinary = require("../utils/uploadImage");
 const ApiFeatures = require("../utils/ApiFeatures");
 const cloudinary = require("cloudinary").v2;
@@ -43,7 +43,7 @@ const createUser = async (req, res, next) => {
 
     // uploading image
     if (user && req.files && req.files.avatar) {
-     uploadImageToCloudinary(req.files.avatar,user,"Farmkal/Users", false);
+      uploadImageToCloudinary(req.files.avatar, user, "Farmkal/Users", false);
 
       if (city != null && city.length > 0) {
         await addUserToCity(city, user._id);
@@ -59,82 +59,72 @@ const createUser = async (req, res, next) => {
   }
 };
 
-const createOrUpdateUser = async (req,res, next) => {
-  try{
+const createOrUpdateUser = async (req, res, next) => {
+  try {
+    console.log("c or up user", req.body);
 
-    console.log("c or up user",req.body);
+    const {
+      id,
+      name,
+      email,
+      password,
+      photoUrl,
+      phone,
+      bio,
+      latitude,
+      longitude,
+      state,
+      city,
+    } = req.body;
 
-  const {
-    id,
-    name,
-    email,
-    password,
-    photoUrl,
-    phone,
-    bio,
-    latitude,
-    longitude,
-    state,
-    city,
-  } = req.body;
+    const data = {
+      name,
+      email,
+      password,
+      photoUrl,
+      phone,
+      bio,
+      latitude,
+      longitude,
+      state,
+      city,
+    };
 
-  const data = {
-    name,
-    email,
-    password,
-    photoUrl,
-    phone,
-    bio,
-    latitude,
-    longitude,
-    state,
-    city,
-  }
+    let user;
 
-  let user;
+    if (phone) console.log(phone);
 
-  if(phone)
-  console.log(phone);
-
-  if(!id && !email && !phone){
-    return next(new CustomError("provide user id or email or phone", 400));
-  }
-
-  if(id) {
-    
-    user = await User.findByIdAndUpdate(id, data, {
-      new : true,
-      runValidators : true,
-      useFindAndModify :true
-    } )
-  
-  }
-  else{
-
-    user = await User.create(data);
-
-    if(city && city.length > 0){
-      await addUserToCity(city,user.id);
+    if (!id && !email && !phone) {
+      return next(new CustomError("provide user id or email or phone", 400));
     }
 
-  }
+    if (id) {
+      user = await User.findByIdAndUpdate(id, data, {
+        new: true,
+        runValidators: true,
+        useFindAndModify: true,
+      });
+    } else {
+      user = await User.create(data);
 
-  console.log("user created");
+      if (city && city.length > 0) {
+        await addUserToCity(city, user.id);
+      }
+    }
 
-  if(user && req.files && req.files.avatar){
-    uploadImageToCloudinary(req.files.avatar,user,"Farmkal/Users", false);
-  }
+    console.log("user created");
 
-  res.status(200).json({
-    success : true,
-    user
-  })
+    if (user && req.files && req.files.avatar) {
+      uploadImageToCloudinary(req.files.avatar, user, "Farmkal/Users", false);
+    }
 
-  }
-  catch(err){
+    res.status(200).json({
+      success: true,
+      user,
+    });
+  } catch (err) {
     next(err);
   }
-
 };
 
 const addUserToCity = async (city, userID, next) => {
@@ -156,7 +146,7 @@ const loginUser = async (req, res, next) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-     return next(new CustomError("Email or password missing", 400));
+      return next(new CustomError("Email or password missing", 400));
     }
 
     const user = await User.findOne({ email });
@@ -172,7 +162,6 @@ const loginUser = async (req, res, next) => {
     }
 
     sendToken(user, 200, res);
-
   } catch (err) {
     next(err);
   }
@@ -201,21 +190,21 @@ const getChatUserList = async (req, res, next) => {
 
     if (!myAllChat) {
       res.status(200).json({
-        success : true,
-        message : "No chat exist",
-        emailList : []
-      })
+        success: true,
+        message: "No chat exist",
+        emailList: [],
+      });
       return;
     }
 
-    const keys = Object.keys(chatList);
+    const keys = Object.keys(myAllChat);
 
     const nameWithEmailArray = []; // result
 
     for (var uniqueId of keys) {
       console.log("uniqueId ", uniqueId);
 
-      if (!Array.isArray(chatList[uniqueId])) continue;
+      if (!Array.isArray(myAllChat[uniqueId])) continue;
 
       const user = await User.findById(uniqueId).select("name email").exec();
 
@@ -250,7 +239,9 @@ const getChatData = async (req, res, next) => {
     const { myEmail, myPhone, friendEmail, friendPhone } = req.body;
 
     if (!friendEmail && !friendPhone) {
-      return next(new CustomError("Please provide friendEmail or friendPhone", 400));
+      return next(
+        new CustomError("Please provide friendEmail or friendPhone", 400),
+      );
     }
     if (!myEmail && !myPhone) {
       return next(new CustomError("Please provide myEmail or myPhone", 400));
@@ -287,7 +278,7 @@ const getChatData = async (req, res, next) => {
       res.status(200).json({
         success: true,
         message: "No chat exist",
-        chatData : []
+        chatData: [],
       });
       return;
     }
@@ -303,36 +294,31 @@ const getChatData = async (req, res, next) => {
 
 // Admin route
 
-const getAllUser = async (req,res,next)=>{
-  try{
-
+const getAllUser = async (req, res, next) => {
+  try {
     const apifeatures = new ApiFeatures(User.find(), req.query)
-    .search()
-    .filter()
-    .paginate();
+      .search()
+      .filter()
+      .paginate();
 
     const users = await apifeatures.query;
 
     res.status(200).json({
-      success : true,
-      users
-    })
-
-  }catch(err){
+      success: true,
+      users,
+    });
+  } catch (err) {
     nexr(err);
   }
-}
+};
 
-const getUser = async (req,res,next)=>{
-  try{
+const getUser = async (req, res, next) => {
+  try {
     const user = await User.findById(req.params.id);
-  }
-  catch(err){
+  } catch (err) {
     next(err);
   }
-
-
-}
+};
 
 module.exports = {
   createUser,
@@ -342,5 +328,5 @@ module.exports = {
   getChatUserList,
   getChatData,
   getAllUser,
-  getUser
+  getUser,
 };
