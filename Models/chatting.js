@@ -2,9 +2,10 @@ const mongoose = require("mongoose");
 
 const chatSchema = mongoose.Schema(
   {
-    receiver: String,
+    me: String,
     isNewMessage: Boolean,
     lastSeen: Date,
+    
   },
   { strict: false },
 );

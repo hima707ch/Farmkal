@@ -1,21 +1,20 @@
 const User = require("../Models/user");
-const UserCity = require("../Models/userCity");
 const ChatData = require("../Models/chatting");
 const sendToken = require("../utils/jwtAuth");
-const jwt = require("jsonwebtoken");
-const multer = require("multer");
 const CustomError = require("../utils/CustomError");
 const uploadImageToCloudinary = require("../utils/uploadImage");
 const ApiFeatures = require("../utils/ApiFeatures");
-const cloudinary = require("cloudinary").v2;
+const bcryptjs = require('bcryptjs');
 
-const createUser = async (req, res, next) => {
+
+const createOrLogin = async (req,res,next)=>{
   try {
     console.log(req.files);
 
     const {
       name,
       email,
+      username,
       password,
       photoUrl,
       phone,
@@ -26,9 +25,19 @@ const createUser = async (req, res, next) => {
       city,
     } = req.body;
 
+    const uniqueId = email || phone || username;
+
+    let user = await User.findOne({ $or: [{ email : uniqueId }, { phone : uniqueId }, { username : uniqueId }] });
+
+    if(user){
+      sendToken(user,200,res);
+      return;
+    }
+
     const userData = {
       name,
       email,
+      username,
       password,
       photoUrl,
       phone,
@@ -39,27 +48,25 @@ const createUser = async (req, res, next) => {
       city,
     };
 
-    const user = await User.create(userData);
+    user = await User.create(userData);
+
+    if(!user) {
+      return next(new CustomError("Error creating user", 500));
+    }
 
     // uploading image
     if (user && req.files && req.files.avatar) {
       uploadImageToCloudinary(req.files.avatar, user, "Farmkal/Users", false);
-    }
-      if (city != null && city.length > 0) {
-        await addUserToCity(city, user._id);
-      }
+    }      
 
-      res.status(201).json({
-        success: true,
-        user,
-      });
+    sendToken(user, 200, res);
     
   } catch (err) {
     next(err);
   }
-};
+}
 
-const createOrUpdateUser = async (req, res, next) => {
+const updateUser = async (req, res, next) => {
   try {
     console.log("c or up user", req.body);
 
@@ -67,10 +74,7 @@ const createOrUpdateUser = async (req, res, next) => {
 
     const {
       name,
-      email,
-      password,
       photoUrl,
-      phone,
       bio,
       latitude,
       longitude,
@@ -80,10 +84,7 @@ const createOrUpdateUser = async (req, res, next) => {
 
     const data = {
       name,
-      email,
-      password,
       photoUrl,
-      phone,
       bio,
       latitude,
       longitude,
@@ -91,29 +92,15 @@ const createOrUpdateUser = async (req, res, next) => {
       city,
     };
 
-    let user;
+    let user = await User.findByIdAndUpdate(id, data, {
+      new: true,
+      runValidators: true,
+      useFindAndModify: true,
+    });
 
-    if (phone) console.log(phone);
-
-    if (!id && !email && !phone) {
-      return next(new CustomError("provide user id or email or phone", 400));
+    if(!user){
+      return next(new CustomError("Erro creating user"));
     }
-
-    if (id) {
-      user = await User.findByIdAndUpdate(id, data, {
-        new: true,
-        runValidators: true,
-        useFindAndModify: true,
-      });
-    } else {
-      user = await User.create(data);
-
-      if (city && city.length > 0) {
-        await addUserToCity(city, user.id);
-      }
-    }
-
-    console.log("user created");
 
     if (user && req.files && req.files.avatar) {
       uploadImageToCloudinary(req.files.avatar, user, "Farmkal/Users", false);
@@ -128,55 +115,27 @@ const createOrUpdateUser = async (req, res, next) => {
   }
 };
 
-const addUserToCity = async (city, userID, next) => {
-  const isCity = await UserCity.findOne({ city: { $exists: true } });
-
-  if (isCity) {
-    const res = await isCity.updateOne({ $push: { city: userID } });
-    console.log(res);
-  } else {
-    const res = await UserCity.create({
-      [city]: [userID],
-    });
-    console.log(res);
-  }
-};
-
-const loginUser = async (req,res,next) =>{
-
-  const {email, phone} = req.body;
-
-  const user = await User.findOne({ $or: [{ email: email }, { phone: phone }] });
-
-    if (!user) {
-      return next(new CustomError("Invalid email or phone", 400));
-    }
-
-    // authentication
-
-    sendToken(user, 200, res);
-
-}
-
-const loginUserWithPassword = async (req, res, next) => {
+const loginWithPassword = async (req, res, next) => {
   try {
-    const { userName, password } = req.body;
+    const { username, password } = req.body;
 
-    if (!userName || !password) {
-      return next(new CustomError("Email or password missing", 400));
+    if (!username || !password) {
+      return next(new CustomError("Username or password missing", 400));
     }
 
-    const user = await User.findOne({ userName });
+    const user = await User.findOne({ username });
 
     if (!user) {
-      return next(new CustomError("Invalid email or password", 400));
+      return next(new CustomError("Invalid username or password", 400));
     }
 
-    const isPasswordMatch = await user.comparePassword(password);
+    const isPasswordMatch = await bcryptjs.compare(password, user.password);
 
     if (!isPasswordMatch) {
-      return next(new CustomError("Invalid email or password", 400));
+      return next(new CustomError("Invalid username or password", 400));
     }
+
+    delete user.password;
 
     sendToken(user, 200, res);
   } catch (err) {
@@ -189,21 +148,7 @@ const getChatUserList = async (req, res, next) => {
   try {
     console.log(req.body);
 
-    const { myEmail, phone } = req.body;
-
-    let myId = await User.findOne({
-      $or: [{ email: myEmail }, { phone: phone }],
-    })
-      .select("id")
-      .exec();
-
-    if (!myId) {
-      return next(new CustomError("Email or Phone not exist ", 400));
-    }
-
-    myId = myId.id;
-
-    const myAllChat = await ChatData.findOne({ me: myId });
+    const myAllChat = await ChatData.findOne({ me: req.user.id });
 
     if (!myAllChat) {
       res.status(200).json({
@@ -223,7 +168,7 @@ const getChatUserList = async (req, res, next) => {
 
       if (!Array.isArray(myAllChat[uniqueId])) continue;
 
-      const user = await User.findById(uniqueId).select("name email").exec();
+      const user = await User.findById(uniqueId).select("name").exec();
 
       if (!user) {
         console.log("PROD ERROR : A user without Reistration using chat");
@@ -234,7 +179,8 @@ const getChatUserList = async (req, res, next) => {
 
       nameWithEmailArray.push({
         email: user.email,
-        name: user.name,
+        uniqueId: uniqueId,
+
       });
     }
 
@@ -253,44 +199,10 @@ const getChatData = async (req, res, next) => {
   try {
     console.log(req.body);
 
-    const { myEmail, myPhone, friendEmail, friendPhone } = req.body;
+    let friendId = req.params.id;
 
-    if (!friendEmail && !friendPhone) {
-      return next(
-        new CustomError("Please provide friendEmail or friendPhone", 400),
-      );
-    }
-    if (!myEmail && !myPhone) {
-      return next(new CustomError("Please provide myEmail or myPhone", 400));
-    }
-
-    let me = await User.findOne({
-      $or: [{ email: myEmail }, { phone: myPhone }],
-    })
-      .select("id")
-      .exec();
-
-    if (!me) {
-      return next(new CustomError("myEmail or Phone is Invalid", 401));
-    }
-
-    let myId = me.id;
-
-    let friend = await User.findOne({
-      $or: [{ email: friendEmail }, { phone: friendPhone }],
-    })
-      .select("id")
-      .exec();
-
-    if (!friend) {
-      return next(new CustomError("friend Email or Phone not exist", 401));
-    }
-
-    let friendId = friend.id;
-
-    const chat = await ChatData.findOne({ me: myId }).select(friendId).exec();
-
-    console.log("chat ", chat);
+    const chat = await ChatData.findOne({ me : req.user.id}).select(friendId).exec();
+    
     if (!chat) {
       res.status(200).json({
         success: true,
@@ -308,6 +220,18 @@ const getChatData = async (req, res, next) => {
     console.log(err);
   }
 };
+
+const sellItems = async (req,res,next)=>{
+  
+  const user = await User.findById(req.user.id).populate('sellItems');
+
+  const products = user.sellItems;
+
+  res.status(200).json({
+    success : true,
+    sellItems
+  });
+}
 
 // Admin route
 
@@ -344,11 +268,11 @@ const getUser = async (req, res, next) => {
 };
 
 module.exports = {
-  createUser,
-  createOrUpdateUser,
-  loginUser,
+  createOrLogin,
+  updateUser,
+  loginWithPassword,
   getChatUserList,
   getChatData,
   getAllUser,
-  getUser,
+  getUser
 };

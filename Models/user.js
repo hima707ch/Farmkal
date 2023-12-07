@@ -13,12 +13,18 @@ const userSchema = mongoose.Schema({
     unique : true,
     validate: [validator.isEmail, "Please Enter a valid Email"],
   },
+  username : {
+    type : String,
+    sparse : true,
+    unique : true
+  },
   password: {
     type: String,
     minLength: [6, "Password should be greater than 6 characters"],
+    select : false
   },
   phone: {
-    type: Number,
+    type: String,
     sparse:true,
     unique: true,
     minLength: [10, "must be 10 digits"],
@@ -131,10 +137,6 @@ userSchema.pre("save", async function (next) {
   }
   next();
 });
-
-userSchema.methods.comparePassword = async function (password) {
-  return await bcrypt.compare(password, this.password);
-};
 
 const User = mongoose.model("User", userSchema);
 

@@ -1,5 +1,4 @@
 const Product = require("../Models/product");
-const ProductCity = require("../Models/productCity");
 const ApiFeatures = require("../utils/ApiFeatures");
 const CustomError = require("../utils/CustomError");
 const uploadImageToCloudinary = require("../utils/uploadImage");
@@ -29,6 +28,7 @@ const createProduct = async (req, res, next) => {
       longitude,
       state,
       city,
+      seller : req.user.id
     };
 
     const product = await Product.create(productData);
@@ -62,25 +62,6 @@ const createProduct = async (req, res, next) => {
   }
 };
 
-const addProductToCity = async (city, productID, category) => {
-  try {
-    const isCity = await ProductCity.findOne({ city: city });
-
-    if (isCity) {
-      const res = await isCity.updateOne({ $push: { [category]: productID } });
-      console.log(res);
-    } else {
-      const res = await ProductCity.create({
-        city: city,
-        [category]: [productID],
-      });
-      console.log(res);
-    }
-  } catch (err) {
-    console.log(err);
-  }
-};
-
 const getAllProduct = async (req, res, next) => {
   try {
     req.query.sort = '-score';
@@ -96,6 +77,8 @@ const getAllProduct = async (req, res, next) => {
     let count = products.length;
     let moreProducts;
 
+
+    // search more product
     if( req.query.city &&  (count < 30 || req.query.sugg == "true") ) {
 
       let nearByCity = [];
@@ -116,8 +99,6 @@ const getAllProduct = async (req, res, next) => {
           nearByCity.push(ele.city);
          }
       } );
-
-      console.log(nearByCity);
 
       req.query.city = { $in : [...nearByCity] };
 
@@ -174,6 +155,7 @@ const updateProduct = async (req, res, next) => {
       longitude,
       state,
       city,
+      delete_public_id
     } = req.body;
 
     const data = {
@@ -192,6 +174,37 @@ const updateProduct = async (req, res, next) => {
       runValidators: true,
       useFindAndModify: false,
     });
+
+    if (!product) {
+      return next(new CustomError("No product found", 400));
+    }
+
+    uploadImageToCloudinary(req.files.image, product, "Farmkal/Products", true);
+
+    if(delete_public_id){
+      
+      let is_deleted;
+
+      product.images = product.images.filter( (image)=>{
+        if(image.public_Id == delete_public_id) {
+          is_deleted = true;
+          return false;
+        }
+      } )
+
+      await product.save();
+
+      if(is_deleted){
+        await cloudinary.uploader.destroy(publicId, (error, result) => {
+          if (error) {
+            console.error("Error deleting image:", error);
+          } else {
+            console.log("Image deleted successfully:", result);
+          }
+        });
+      }
+
+    }
 
     return res.status(200).json({
       success: true,
@@ -222,118 +235,10 @@ catch(err){
 }
 }
 
-const addImage = async (req, res, next) => {
-  try {
-    let product = await Product.findById(req.params.id);
-
-    if (!product) {
-      return next(new CustomError("No product found", 400));
-    }
-
-    uploadImageToCloudinary(req.files.image, product, "Farmkal/Products", true);
-
-    res.status(200).json({
-      success : true
-    })
-
-  } catch (err) {
-    next(err);
-  }
-};
-
-const deleteImage = async (req, res, next) => {
-  try {
-
-    let product = await Product.findById(req.params.id);
-
-    const { publicId } = req.params;
-
-    if (!publicId) {
-      return next(new CustomError("No public Id"));
-    }
-
-    await cloudinary.uploader.destroy(publicId, (error, result) => {
-      if (error) {
-        console.error("Error deleting image:", error);
-      } else {
-        console.log("Image deleted successfully:", result);
-
-        product.images = product.images.filter( (element)=>{
-          if(element.public_Id == publicId){
-            return false;
-          }
-          return true;
-        } )
-
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-const getProductFromCity = async (req, res, next) => {
-
-  // To do - rank according to score
-  // If less prod fetch from other city
-
-  try {
-    const { city, category, page, limit } = req.body;
-    // console.log("here")
-
-    const queryOptions = {};
-
-    if (page && limit) {
-      queryOptions = {
-        limit,
-        skip: limit * (page - 1),
-      };
-    }
-
-    const products = await ProductCity.findOne({ name: city })
-      .populate({
-        path: "solid vechiel", // wite all category here from category array;
-        options: queryOptions,
-      })
-      .select("-_id -__v -name");
-
-    if (!products) {
-      return next("No product in city exist", 400);
-    }
-
-
-    let result = [];
-
-    if (category) {
-      result = products[category];
-    } else {
-      const values = Object.values(products.toObject());
-
-      const temp = [];
-
-      values.map((ele) => {
-        temp.push(...ele);
-        return;
-      });
-
-      result = shuffleArray(temp);
-    }
-
-    res.status(200).json({
-      success: true,
-      products: result,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
 module.exports = {
   createProduct,
   getAllProduct,
   getProduct,
   updateProduct,
-  addImage,
-  deleteImage,
   deleteProduct
 };

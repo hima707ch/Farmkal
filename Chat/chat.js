@@ -1,11 +1,13 @@
 const socketIo = require("socket.io");
 const app = require("../app");
 const http = require("http");
-const server = http.createServer(app);
-const io = socketIo(server);
 const { log } = require("console");
 const ChatData = require("../Models/chatting");
 const User = require("../Models/user");
+
+const server = http.createServer(app);
+
+const io = socketIo(server);
 
 const users = {}; // to store user sockets
 
@@ -15,32 +17,16 @@ io.on("connection", (socket) => {
   let userObjId; // my objId or sender objId
 
   socket.on("signin", async (userData) => {
-    const { emailId, phone } = userData;
+    const { id } = userData;
     log("event sign in callled");
 
-    if (!emailId && !phone) {
-      console.log("No email id or phone ");
-      socket.emit("invalid_data", { error: "No emailId or phone recieved" });
+    if (!id) {
+      console.log("No user id");
+      socket.emit("invalid_data", { error: "No user id" });
       return;
     }
 
-    console.log(emailId, phone);
-
-    userObjId = await User.findOne({
-      $or: [{ email: emailId }, { phone: phone }],
-    })
-      .select("_id")
-      .exec();
-
-    if (!userObjId) {
-      res.status(400).json({
-        success: false,
-        message: "User/My Email or Phone not exist",
-      });
-    }
-
-    userObjId = userObjId.id;
-    console.log(userObjId);
+    userObjId = id;
 
     users[userObjId] = socket.id;
     getNewMessage(userObjId);
@@ -50,21 +36,21 @@ io.on("connection", (socket) => {
 
   // server rereciving message from frontend
   socket.on("chat", async (data) => {
-    const { receiverPhone, receiverEmailId, message } = data;
+    const { receiverUserId, message } = data;
 
     console.log("chat msg ", message);
 
-    if (!receiverEmailId && !receiverPhone) {
-      console.log(" No reciever Email or Phone ");
+    if (!receiverUserId) {
+      console.log(" No receiverUserId ");
       socket.emit("invalid_data", {
-        error: "No reciver Eamil Id or Phone recieved",
+        error: "No receiverUserId",
       });
       return;
     }
     if (!userObjId) {
-      console.log(" No User Email Id ");
+      console.log(" No User Id ");
       socket.emit("invalid_data", {
-        error: "No user Email Id or user Phone recieved",
+        error: "please sign in before sending chat",
       });
       return;
     }
@@ -74,24 +60,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    let receiverObjId = await User.findOne({
-      $or: [{ email: receiverEmailId }, { phone: receiverPhone }],
-    })
-      .select("id")
-      .exec();
+    await saveMessage(userObjId, receiverUserId, message, false, "post",{});
 
-    if (!receiverObjId) {
-      res.status(400).json({
-        success: false,
-        message: "Receiver Email or Phone not exist",
-      });
-    }
-
-    receiverObjId = receiverObjId.id;
-
-    await saveMessage(userObjId, receiverObjId, message, false, "post");
-
-    const receiverSocketId = users[receiverObjId];
+    const receiverSocketId = users[receiverUserId];
 
     if (receiverSocketId) {
       console.log("inside if");
@@ -101,13 +72,13 @@ io.on("connection", (socket) => {
         message,
       });
 
-      await saveMessage(receiverObjId, userObjId, message, false, "get");
+      await saveMessage(receiverUserId, userObjId, message, false, "get",{});
     } else {
       // saving in reciver database as new message
 
-      await saveMessage(receiverObjId, userObjId, message, true, "get");
+      await saveMessage(receiverUserId, userObjId, message, true, "get",{});
       console.log(
-        `User ${receiverEmailId} is offline. Save the message for later.`,
+        `User ${receiverUserId} is offline. Save the message for later.`,
       );
     }
   });
@@ -140,29 +111,31 @@ async function getNewMessage(myId) {
     if (!Array.isArray(userChatData[key])) {
       continue;
     }
+
     // Iterating messaghe of particular email
     for (var msgDoc of userChatData[key]) {
+      console.log("line 116")
       io.to(mySocketId).emit("sendMsg", {
         sender: key,
         message: msgDoc.message,
       });
-      await saveMessage(myId, key, msgDoc.message, false, "get");
+      await saveMessage(myId, key, msgDoc.message, false, "get",{});
     }
   }
   await ChatData.deleteOne({ me: myId, isNewMessage: true });
 }
 
-async function saveMessage(myId, friendId, message, isNew, type) {
+async function saveMessage(myId, friendId, message, isNew, type , optional) {
   console.log("Save message called");
-  let myChat;
-
-  console.log("my Id ", myId, "friendId ", friendId);
 
   // find user chat
-  myChat = await ChatData.findOne({ me: myId, isNewMessage: isNew });
+  let myChat = await ChatData.findOne({ me: myId, isNewMessage: isNew });
 
   // if i am a new user
   if (!myChat) {
+    
+    console.log('new user');
+    
     myChat = await ChatData.create({
       me: myId,
       isNewMessage: isNew,
@@ -170,6 +143,7 @@ async function saveMessage(myId, friendId, message, isNew, type) {
   }
 
   // pushing chat
+
   const resp = await ChatData.updateOne(
     { me: myId, isNewMessage: isNew },
     {
@@ -183,7 +157,54 @@ async function saveMessage(myId, friendId, message, isNew, type) {
     },
     { upsert: true },
   );
-  log("save msg over");
+
+  /*
+  if(isNew == false && !myChat[friendId]){
+
+    const friend = await User.findById(friendId);
+
+    console.log(friend, friendId);
+
+    myChat[friendId] = {
+      name : friend.name,
+    };
+
+    if(optional.product){
+      myChat[friendId].productId = optional.product.id || null,
+      myChat[friendId].productName = optional.product.name || null
+    }
+    myChat[friendId]['chats'] = [];
+    console.log(myChat[friendId]['chats']);
+   
+  }
+
+  let temp = friendId + '.chats';
+
+  if(myChat[temp]){
+    myChat[temp].push({
+      message: message,
+      time: Date.now(),
+      type: type,
+    });
+  }
+
+  else {
+    myChat[temp] = [{
+      message: message,
+      time: Date.now(),
+      type: type,
+    }]
+  }
+
+
+  temp = friendId + '.latest'
+  myChat[temp] = Date.now();
+
+  await myChat.save();
+*/
+
+ log("save msg over");
+
 }
 
 module.exports = { server };
