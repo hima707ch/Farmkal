@@ -26,7 +26,7 @@ app.use(fileUpload());
 // routes
 
 app.get("/", (req, res) => {
-  res.send("ok");
+  res.send("okk");
 });
 app.use("/api/v1", userRouter);
 app.use("/api/v1", productRouter);

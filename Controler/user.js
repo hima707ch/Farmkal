@@ -45,15 +45,14 @@ const createUser = async (req, res, next) => {
     if (user && req.files && req.files.avatar) {
       uploadImageToCloudinary(req.files.avatar, user, "Farmkal/Users", false);
     }
-      if (city != null && city.length > 0) {
-        await addUserToCity(city, user._id);
-      }
+    if (city != null && city.length > 0) {
+      await addUserToCity(city, user._id);
+    }
 
-      res.status(201).json({
-        success: true,
-        user,
-      });
-    
+    res.status(201).json({
+      success: true,
+      user,
+    });
   } catch (err) {
     next(err);
   }
@@ -63,7 +62,7 @@ const createOrUpdateUser = async (req, res, next) => {
   try {
     console.log("c or up user", req.body);
 
-    const {id} = req.params;
+    const { id } = req.params;
 
     const {
       name,
@@ -142,21 +141,21 @@ const addUserToCity = async (city, userID, next) => {
   }
 };
 
-const loginUser = async (req,res,next) =>{
+const loginUser = async (req, res, next) => {
+  const { email, phone } = req.body;
 
-  const {email, phone} = req.body;
+  const user = await User.findOne({
+    $or: [{ email: email }, { phone: phone }],
+  });
 
-  const user = await User.findOne({ $or: [{ email: email }, { phone: phone }] });
+  if (!user) {
+    return next(new CustomError("Invalid email or phone", 400));
+  }
 
-    if (!user) {
-      return next(new CustomError("Invalid email or phone", 400));
-    }
+  // authentication
 
-    // authentication
-
-    sendToken(user, 200, res);
-
-}
+  sendToken(user, 200, res);
+};
 
 const loginUserWithPassword = async (req, res, next) => {
   try {
@@ -334,10 +333,9 @@ const getUser = async (req, res, next) => {
     const user = await User.findById(req.params.id);
 
     res.status(200).json({
-      success : true,
-      user
-    })
-
+      success: true,
+      user,
+    });
   } catch (err) {
     next(err);
   }

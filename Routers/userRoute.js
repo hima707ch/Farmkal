@@ -11,7 +11,7 @@ const router = require("express").Router();
 
 router.route("/registerpassword").post(createUser);
 router.route("/login").post(loginUser);
-router.post("/register",createOrUpdateUser);
+router.post("/createorupdate", createOrUpdateUser);
 router.route("/chat").post(getChatUserList);
 router.route("/chatdata").post(getChatData);
 
