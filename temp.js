@@ -1,22 +1,18 @@
-const { Configuration, OpenAIApi } = require("openai");
+const OpenAI = require("openai");
 
-console.log(process.env.OPENAI_KEY)
+console.log(process.env.OPENAI_KEY);
 
-const openai = OpenAIApi({
-  apiKey: "",
+const openai = new OpenAI({
+  apiKey: "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",
 });
 
+async function main() {
+  const completion = await openai.chat.completions.create({
+    messages: [{ role: "system", content: "You are a helpful assistant." }],
+    model: "gpt-3.5-turbo",
+  });
 
-// Now you can use the 'openai' instance to make API calls
+  console.log(completion.choices[0]);
+}
 
-  async function run(){
-    const response = await openAi.createChatCompletion({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: "5+5" }],
-    })
-  
-    console.log(response.data.choices[0].message.content)
-
-  }
-
-  run();
+main();

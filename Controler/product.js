@@ -28,7 +28,7 @@ const createProduct = async (req, res, next) => {
       longitude,
       state,
       city,
-      seller : req.user.id
+      seller: req.user.id,
     };
 
     const product = await Product.create(productData);
@@ -49,10 +49,6 @@ const createProduct = async (req, res, next) => {
       }
     }
 
-    if (city && category) {
-      addProductToCity(city, product._id, category);
-    }
-
     res.status(200).json({
       success: true,
       product,
@@ -64,10 +60,10 @@ const createProduct = async (req, res, next) => {
 
 const getAllProduct = async (req, res, next) => {
   try {
-    req.query.sort = '-score';
+    req.query.sort = "-score";
     console.log(req.query);
 
-    let apifeatures = new ApiFeatures(Product.find(), req.query)
+    let apifeatures = new ApiFeatures(Product.find(), req.query, "product")
       .filter()
       .sort()
       .paginate();
@@ -77,44 +73,56 @@ const getAllProduct = async (req, res, next) => {
     let count = products.length;
     let moreProducts;
 
-
     // search more product
-    if( req.query.city &&  (count < 30 || req.query.sugg == "true") ) {
-
+    if (req.query.city && (count < 30 || req.query.sugg == "true")) {
       let nearByCity = [];
 
-      const myCity = citiesData.filter( (ele)=>{
-        if(ele.city == req.query.city){
+      req.query.city = req.query.city.toLowerCase();
+
+      const myCity = citiesData.filter((ele) => {
+        if (ele.city == req.query.city) {
           return true;
         }
-      } );
+      });
+
+      if (myCity.length == 0) {
+        res.status(200).json({
+          success: true,
+          products,
+          message: "No suggestion, city not exist for suggestion",
+        });
+        return;
+      }
 
       myLatitude = myCity[0].latitude;
       myLongitude = myCity[0].longitude;
 
-      citiesData.map( (ele)=>{
-        if(ele.city == myCity[0].city) return;
-        if( (ele.latitude< myLatitude + 1 && ele.latitude > myLatitude - 1) &&
-         (ele.longitude < myLongitude +1 && ele.longitude > myLongitude - 1) ){
+      citiesData.map((ele) => {
+        if (ele.city == myCity[0].city) return;
+        if (
+          ele.latitude < myLatitude + 1 &&
+          ele.latitude > myLatitude - 1 &&
+          ele.longitude < myLongitude + 1 &&
+          ele.longitude > myLongitude - 1
+        ) {
           nearByCity.push(ele.city);
-         }
-      } );
+        }
+      });
 
-      req.query.city = { $in : [...nearByCity] };
+      req.query.city = { $in: [...nearByCity] };
 
       apifeatures = new ApiFeatures(Product.find(), req.query)
-      .filter()
-      .sort()
-      .paginate();
+        .filter()
+        .sort()
+        .paginate();
 
       moreProducts = await apifeatures.query;
-
     }
 
     res.status(200).json({
       success: true,
       products,
-      moreProducts
+      moreProducts,
     });
   } catch (err) {
     next(err);
@@ -155,7 +163,7 @@ const updateProduct = async (req, res, next) => {
       longitude,
       state,
       city,
-      delete_public_id
+      delete_public_id,
     } = req.body;
 
     const data = {
@@ -181,20 +189,19 @@ const updateProduct = async (req, res, next) => {
 
     uploadImageToCloudinary(req.files.image, product, "Farmkal/Products", true);
 
-    if(delete_public_id){
-      
+    if (delete_public_id) {
       let is_deleted;
 
-      product.images = product.images.filter( (image)=>{
-        if(image.public_Id == delete_public_id) {
+      product.images = product.images.filter((image) => {
+        if (image.public_Id == delete_public_id) {
           is_deleted = true;
           return false;
         }
-      } )
+      });
 
       await product.save();
 
-      if(is_deleted){
+      if (is_deleted) {
         await cloudinary.uploader.destroy(publicId, (error, result) => {
           if (error) {
             console.error("Error deleting image:", error);
@@ -203,7 +210,6 @@ const updateProduct = async (req, res, next) => {
           }
         });
       }
-
     }
 
     return res.status(200).json({
@@ -215,30 +221,29 @@ const updateProduct = async (req, res, next) => {
   }
 };
 
-const deleteProduct = async (req,res,next) =>{
-  try{
+const deleteProduct = async (req, res, next) => {
+  try {
     const id = req.params.id;
 
     const resp = await Product.findByIdAndDelete(id);
 
-    if(!resp){
-        return next(new CustomError("No product Found", 200));
+    if (!resp) {
+      return next(new CustomError("No product Found", 200));
     }
 
     res.status(200).json({
-        success : true,
-        message : "Product deleted successfully"
-    })
-}
-catch(err){
+      success: true,
+      message: "Product deleted successfully",
+    });
+  } catch (err) {
     next(err);
-}
-}
+  }
+};
 
 module.exports = {
   createProduct,
   getAllProduct,
   getProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
 };

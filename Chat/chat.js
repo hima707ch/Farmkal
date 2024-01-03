@@ -60,9 +60,11 @@ io.on("connection", (socket) => {
       return;
     }
 
-    await saveMessage(userObjId, receiverUserId, message, false, "post",{});
+    await saveMessage(userObjId, receiverUserId, message, false, "post", {});
 
     const receiverSocketId = users[receiverUserId];
+
+    console.log("rec soc id", receiverSocketId);
 
     if (receiverSocketId) {
       console.log("inside if");
@@ -72,11 +74,11 @@ io.on("connection", (socket) => {
         message,
       });
 
-      await saveMessage(receiverUserId, userObjId, message, false, "get",{});
+      await saveMessage(receiverUserId, userObjId, message, false, "get", {});
     } else {
       // saving in reciver database as new message
 
-      await saveMessage(receiverUserId, userObjId, message, true, "get",{});
+      await saveMessage(receiverUserId, userObjId, message, true, "get", {});
       console.log(
         `User ${receiverUserId} is offline. Save the message for later.`,
       );
@@ -114,18 +116,18 @@ async function getNewMessage(myId) {
 
     // Iterating messaghe of particular email
     for (var msgDoc of userChatData[key]) {
-      console.log("line 116")
+      console.log("line 116");
       io.to(mySocketId).emit("sendMsg", {
         sender: key,
         message: msgDoc.message,
       });
-      await saveMessage(myId, key, msgDoc.message, false, "get",{});
+      await saveMessage(myId, key, msgDoc.message, false, "get", {});
     }
   }
   await ChatData.deleteOne({ me: myId, isNewMessage: true });
 }
 
-async function saveMessage(myId, friendId, message, isNew, type , optional) {
+async function saveMessage(myId, friendId, message, isNew, type, optional) {
   console.log("Save message called");
 
   // find user chat
@@ -133,9 +135,8 @@ async function saveMessage(myId, friendId, message, isNew, type , optional) {
 
   // if i am a new user
   if (!myChat) {
-    
-    console.log('new user');
-    
+    console.log("new user");
+
     myChat = await ChatData.create({
       me: myId,
       isNewMessage: isNew,
@@ -203,8 +204,7 @@ async function saveMessage(myId, friendId, message, isNew, type , optional) {
   await myChat.save();
 */
 
- log("save msg over");
-
+  log("save msg over");
 }
 
 module.exports = { server };

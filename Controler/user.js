@@ -4,10 +4,9 @@ const sendToken = require("../utils/jwtAuth");
 const CustomError = require("../utils/CustomError");
 const uploadImageToCloudinary = require("../utils/uploadImage");
 const ApiFeatures = require("../utils/ApiFeatures");
-const bcryptjs = require('bcryptjs');
+const bcryptjs = require("bcryptjs");
 
-
-const createOrLogin = async (req,res,next)=>{
+const create = async (req, res, next) => {
   try {
     console.log(req.files);
 
@@ -25,15 +24,6 @@ const createOrLogin = async (req,res,next)=>{
       city,
     } = req.body;
 
-    const uniqueId = email || phone || username;
-
-    let user = await User.findOne({ $or: [{ email : uniqueId }, { phone : uniqueId }, { username : uniqueId }] });
-
-    if(user){
-      sendToken(user,200,res);
-      return;
-    }
-
     const userData = {
       name,
       email,
@@ -50,37 +40,28 @@ const createOrLogin = async (req,res,next)=>{
 
     user = await User.create(userData);
 
-    if(!user) {
+    if (!user) {
       return next(new CustomError("Error creating user", 500));
     }
 
     // uploading image
     if (user && req.files && req.files.avatar) {
       uploadImageToCloudinary(req.files.avatar, user, "Farmkal/Users", false);
-    }      
+    }
 
     sendToken(user, 200, res);
-    
   } catch (err) {
     next(err);
   }
-}
+};
 
 const updateUser = async (req, res, next) => {
   try {
     console.log("c or up user", req.body);
 
-    const {id} = req.params;
+    const { id } = req.params;
 
-    const {
-      name,
-      photoUrl,
-      bio,
-      latitude,
-      longitude,
-      state,
-      city,
-    } = req.body;
+    const { name, photoUrl, bio, latitude, longitude, state, city } = req.body;
 
     const data = {
       name,
@@ -98,7 +79,7 @@ const updateUser = async (req, res, next) => {
       useFindAndModify: true,
     });
 
-    if(!user){
+    if (!user) {
       return next(new CustomError("Erro creating user"));
     }
 
@@ -115,15 +96,38 @@ const updateUser = async (req, res, next) => {
   }
 };
 
-const loginWithPassword = async (req, res, next) => {
+const login = async (req, res, next) => {
   try {
+    const { email, phone } = req.body;
+
+    // console.log(req.body);
+
+    if (email || phone) {
+      const uniqueId = email || phone;
+
+      // console.log(uniqueId);
+
+      let user = await User.findOne({
+        $or: [{ email: uniqueId }, { phone: uniqueId }],
+      });
+
+      if (!user) {
+        return next(new CustomError(`${email || phone} not exist`, 200));
+      }
+
+      if (user) {
+        sendToken(user, 200, res);
+        return;
+      }
+    }
+
     const { username, password } = req.body;
 
     if (!username || !password) {
       return next(new CustomError("Username or password missing", 400));
     }
 
-    const user = await User.findOne({ username });
+    user = await User.findOne({ username });
 
     if (!user) {
       return next(new CustomError("Invalid username or password", 400));
@@ -168,7 +172,9 @@ const getChatUserList = async (req, res, next) => {
 
       if (!Array.isArray(myAllChat[uniqueId])) continue;
 
-      const user = await User.findById(uniqueId).select("name").exec();
+      const user = await User.findById(uniqueId)
+        .select("name email phone username")
+        .exec();
 
       if (!user) {
         console.log("PROD ERROR : A user without Reistration using chat");
@@ -179,8 +185,9 @@ const getChatUserList = async (req, res, next) => {
 
       nameWithEmailArray.push({
         email: user.email,
-        uniqueId: uniqueId,
-
+        ObjId: uniqueId,
+        name: user.name,
+        phone: user.phone,
       });
     }
 
@@ -201,8 +208,10 @@ const getChatData = async (req, res, next) => {
 
     let friendId = req.params.id;
 
-    const chat = await ChatData.findOne({ me : req.user.id}).select(friendId).exec();
-    
+    const chat = await ChatData.findOne({ me: req.user.id })
+      .select(friendId)
+      .exec();
+
     if (!chat) {
       res.status(200).json({
         success: true,
@@ -221,27 +230,25 @@ const getChatData = async (req, res, next) => {
   }
 };
 
-const sellItems = async (req,res,next)=>{
-  
-  const user = await User.findById(req.user.id).populate('sellItems');
+const sellItems = async (req, res, next) => {
+  const user = await User.findById(req.user.id).populate("sellItems");
 
   const products = user.sellItems;
 
   res.status(200).json({
-    success : true,
-    sellItems
+    success: true,
+    sellItems,
   });
-}
+};
 
 // Admin route
 
 const getAllUser = async (req, res, next) => {
   try {
-    const apifeatures = new ApiFeatures(User.find(), req.query)
-      .search()
+    const apifeatures = new ApiFeatures(User.find(), req.query, "user")
       .filter()
+      .sort()
       .paginate();
-
     const users = await apifeatures.query;
 
     res.status(200).json({
@@ -249,7 +256,7 @@ const getAllUser = async (req, res, next) => {
       users,
     });
   } catch (err) {
-    nexr(err);
+    next(err);
   }
 };
 
@@ -258,21 +265,20 @@ const getUser = async (req, res, next) => {
     const user = await User.findById(req.params.id);
 
     res.status(200).json({
-      success : true,
-      user
-    })
-
+      success: true,
+      user,
+    });
   } catch (err) {
     next(err);
   }
 };
 
 module.exports = {
-  createOrLogin,
+  create,
   updateUser,
-  loginWithPassword,
+  login,
   getChatUserList,
   getChatData,
   getAllUser,
-  getUser
+  getUser,
 };
